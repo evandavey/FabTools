@@ -92,9 +92,9 @@ def update_apache_conf():
 	print(red('moving conf files'))
 
 	conf_dest = os.path.join(env.apacheconfig, 'sites','%(servername)s.conf' % env)
-	conf=os.path.join(env.code_root,'install','%s.conf' % env.environment)
+	conf=os.path.join(env.code_root,'fabtools','install','%s.conf' % env.environment)
 
-	wsgi=os.path.join(env.code_root,'install','%s.wsgi' % env.environment)
+	wsgi=os.path.join(env.code_root,'fabtools','install','%s.wsgi' % env.environment)
 	wsgi_dest=os.path.join(env.code_root,'apache','%s.wsgi' % env.environment)
 
 	run('mkdir -p %s' % os.path.join(env.code_root,'apache'))
