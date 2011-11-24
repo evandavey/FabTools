@@ -130,8 +130,8 @@ def create_apache_conf_files():
 	
 	conf=os.path.join(env.code_root,'fabtools','install','%s.conf' % env.environment)
 	
-	wsgi_template=os.path.join(env.code_root,'install','template.wsgi')
-	wsgi=os.path.join(env.code_root,'install','%s.wsgi' % env.environment)
+	wsgi_template=os.path.join(env.code_root,'fabtools','install','template.wsgi')
+	wsgi=os.path.join(env.code_root,'fabtools','install','%s.wsgi' % env.environment)
 	wsgi_template=get(wsgi_template)[0]
 	
 	r={ 'project':env.project,
