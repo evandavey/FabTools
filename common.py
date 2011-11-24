@@ -21,9 +21,12 @@ def setup():
         checkout_latest()
         destroy_database()
         create_database()
-        load_data()
+        #load_data()
         install_requirements()
-        install_apache_conf()
+        setup_apache()
+        syncdb()
+        migratedb()
+        
    
 def setup_directories():
     """
@@ -65,14 +68,93 @@ def install_requirements():
     with virtualenv():
         ## hack to overcome no order in requirements files	
         for line in open(requirements_file, "r"): 
-            run("pip install %s" % (line))
+            
+            if line[0] != '#' and line[0].strip() !="":
+                run("pip install %s" % (line))
 
 
-def install_apache_conf():
-    """
-    Install the apache site config file.
-    """
-    #sudo('cp %(repo_path)s/%(project_name)s/configs/%(settings)s/%(project_name)s %(apache_config_path)s' % env)
+
+"""
+Commands - apache
+"""
+def setup_apache():
+	
+	print(green('Updating apache settings'))
+	
+	create_apache_conf_files()
+	update_apache_conf()
+	
+def update_apache_conf():
+	""" upload apache configuration to remote host """
+
+	require('root', provided_by=('staging', 'production'))
+
+	print(red('moving conf files'))
+
+	conf_dest = os.path.join(env.apacheconfig, 'sites','%(servername)s.conf' % env)
+	conf=os.path.join(env.code_root,'install','%s.conf' % env.environment)
+
+	wsgi=os.path.join(env.code_root,'install','%s.wsgi' % env.environment)
+	wsgi_dest=os.path.join(env.code_root,'apache','%s.wsgi' % env.environment)
+
+	run('mkdir -p %s' % os.path.join(env.code_root,'apache'))
+	run('cp %s %s' % (wsgi,wsgi_dest))
+	run('cp %s %s' % (conf,conf_dest))
+	reboot()
+
+
+def configtest():    
+    """ test Apache configuration """
+    require('root', provided_by=('staging', 'production'))
+    run('apachectl configtest')
+
+
+def reboot():    
+	""" reload Apache on remote host """
+
+	print(red('Reloading apache'))
+
+	require('root', provided_by=('staging', 'production'))
+	run('sudo apachectl restart')
+
+
+
+def create_apache_conf_files():
+	""" creates apache conf files from templates in ./install/ """
+
+	print(green('Creating apache conf files from templates'))
+	
+	conf_template=os.path.join(env.code_root,'fabtools','install','template.conf')
+	
+	conf_template=get(conf_template)[0]
+	
+	conf=os.path.join(env.code_root,'fabtools','install','%s.conf' % env.environment)
+	
+	wsgi_template=os.path.join(env.code_root,'install','template.wsgi')
+	wsgi=os.path.join(env.code_root,'install','%s.wsgi' % env.environment)
+	wsgi_template=get(wsgi_template)[0]
+	
+	r={ 'project':env.project,
+		'environment':env.environment,
+		'servername':env.servername,
+		'home':env.home,
+		'certificate-file':os.path.join(env.apacheconfig,'ssl-certificate.conf')
+	}
+	
+	print(red('Replacing %s and saving as %s' % (conf_template,conf)))
+	_open_file_and_replace(conf_template,conf_template + ".out",r)
+	put(conf_template+ ".out", conf, mode=0755)
+	
+	print(red('Replacing %s and saving as %s' % (conf_template,conf)))
+	_open_file_and_replace(wsgi_template,wsgi_template+".out",r)
+	put(wsgi_template+ ".out", wsgi, mode=0755)
+	
+	
+	local('rm -r %s' % env.host)
+
+	
+
+
 
 
 """
@@ -84,13 +166,14 @@ def deploy():
     
     Does not perform the functions of load_new_data().
     """
-    require('settings', provided_by=[production, staging])
-    require('branch', provided_by=[stable, master, branch])
+   
     
     with settings(warn_only=True):
         maintenance_up()
         
     checkout_latest()
+    migrate()
+    collectstatic()
     gzip_assets()
     maintenance_down()
     
@@ -106,14 +189,9 @@ def gzip_assets():
     GZips every file in the assets directory and places the new file
     in the gzip directory with the same filename.
     """
-    run('cd %(repo_path)s; python gzip_assets.py' % env)
+    pass
+    #run('cd %(repo_path)s; python gzip_assets.py' % env)
 
-
-def reboot(): 
-    """
-    Restart the Apache2 server.
-    """
-    #sudo('/mnt/apps/bin/restart-all-apache.sh')
     
 def maintenance_down():
     """
@@ -132,15 +210,12 @@ def rollback(commit_id):
     There is NO guarantee we have committed a valid dataset for an arbitrary
     commit hash.
     """
-    require('settings', provided_by=[production, staging])
-    require('branch', provided_by=[stable, master, branch])
+
     
     maintenance_up()
     checkout_latest()
     git_reset(commit_id)
     gzip_assets()
-    deploy_to_s3()
-    refresh_widgets()
     maintenance_down()
     
 def git_reset(commit_id):
@@ -169,11 +244,12 @@ def create_database():
     Creates the user and database for this project.
     """
     
-    user_sql="grant all privileges on %(db)s.* to '%(db_user)s'@'%%'identified by '%(db_password)s" % env
+    create_sql="create database %(db)s;" % env
+    user_sql="grant all privileges on %(db)s.* to '%(db_user)s'@'%%' identified by '%(db_password)s';" % env
     
+    sql=create_sql+user_sql
    
-    run('echo "create database %(db)s" | mysql -uroot -p'  % env)
-    run('echo "%s" | mysql -uroot -p'  % user_sql)
+    run('echo "%s" | mysql -uroot -p'  % (sql))
     
 def destroy_database():
     """
@@ -184,54 +260,68 @@ def destroy_database():
     with settings(warn_only=True):
         run('echo "drop database if exists %(db)s" | mysql -uroot -p'  % env)
        
-        
+
 def load_data():
     """
     Loads data from the repository into PostgreSQL.
     """
+    with settings(warn_only=True):
+         run('mysql -u%(db_user)s -p%(db_password)s %(db)s < %(db_backup)s' % env)
     #run('psql -q %(project_name)s < %(path)s/repository/data/psql/dump.sql' % env)
     #run('psql -q %(project_name)s < %(path)s/repository/data/psql/finish_init.sql' % env)
     
+def dump_data():
+    """
+    Creates a database backup
+    """
+    
+    run('mysqldump -u%(db_user)s -p%(db_password)s %(db)s > %(db_backup)s' % env)
 
 """
 Commands - django
 """
+def _manage(cmd):
+	""" runs django command cmd """
 
+
+	if env.environment == 'development':
+		local('./manage.py %s --settings=%s.settings_%s' % (cmd,env.project,env.environment))
+		return
+
+	with virtualenv():
+		with cd(env.code_root):
+			run('./manage.py %s --settings=%s.settings_%s' % (cmd,env.project,env.environment))
+			
 def syncdb():
 	""" syncs the django database """
 	
 	print(green("Syncing %s database" % env.project))
 	
-	with virtualenv():
-		with cd(env.code_root):
-			run('./manage.py syncdb --settings=%s.settings_%s' % (env.project,env.environment))
-			
+	_manage('syncdb')
+
+
+
 def runserver():
-	""" runs the project as a development server """
+    """ runs the project as a development server """
 
 
-	print(green('Running development server.  Access at http://127.0.0.1:%s' % env.serverport))
+    print(green('Running development server.  Access at http://127.0.0.1:%s' % env.serverport))
 
-
-	if env.environment == 'development':
-		local('./manage.py runserver 0.0.0.0:%s --settings=%s.settings_%s' % (env.serverport,env.project,env.environment))
-		return
-
-	with virtualenv():
-		with cd(env.code_root):
-			run('./manage.py runserver 0.0.0.0:%s --settings=%s.settings_%s' % (env.serverport,env.project,env.environment))
-
+    _manage('runserver 0.0.0.0:%s' % env.serverport)
 
 def collectstatic():
-	""" collects static files """
+    """ collects static files """
 
-	print(green('Collecting static files'))
+    print(green('Collecting static files'))
 
-	with virtualenv():
-		with cd(env.code_root):
-			run('./manage.py collectstatic --settings=%s.settings_%s' % (env.project,env.environment))
+    _manage('collectstatic')
+ 
+def migrate():
+    """ migrates apps using south """
 
+    print(green('Migrating apps'))
 
+    _manage('migrate --all')   
 
 """
 Commands - miscellaneous
@@ -270,3 +360,19 @@ def virtualenv():
 
 	with prefix(activate):
 	    yield
+	    
+def _open_file_and_replace(src,dest,replace_dict):
+	""" replaces <key> in src with val from key,val of replace_dict with supplied values and saves as dest 
+	"""
+
+	f=open(src,'r')
+	o=open(dest,'w')
+
+	for line in f.readlines():
+		for k,r in replace_dict.iteritems():
+			line=line.replace('<%s>' % k,'%s' % r)
+
+		o.write(line+"\n")
+
+	f.close()
+	o.close()
