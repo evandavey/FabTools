@@ -324,7 +324,7 @@ def migrate():
     manage('migrate --all')   
 
 
-def migrate():
+def shell():
     """ migrates apps using south """
 
     manage('shell')
