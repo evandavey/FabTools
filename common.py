@@ -280,7 +280,7 @@ def dump_data():
 """
 Commands - django
 """
-def _manage(cmd):
+def manage(cmd):
 	""" runs django command cmd """
 
 
@@ -297,7 +297,7 @@ def syncdb():
 	
 	print(green("Syncing %s database" % env.project))
 	
-	_manage('syncdb')
+	manage('syncdb')
 
 
 
@@ -307,21 +307,27 @@ def runserver():
 
     print(green('Running development server.  Access at http://127.0.0.1:%s' % env.serverport))
 
-    _manage('runserver 0.0.0.0:%s' % env.serverport)
+    manage('runserver 0.0.0.0:%s' % env.serverport)
 
 def collectstatic():
     """ collects static files """
 
     print(green('Collecting static files'))
 
-    _manage('collectstatic')
+    manage('collectstatic')
  
 def migrate():
     """ migrates apps using south """
 
     print(green('Migrating apps'))
 
-    _manage('migrate --all')   
+    manage('migrate --all')   
+
+
+def migrate():
+    """ migrates apps using south """
+
+    manage('shell')
 
 """
 Commands - miscellaneous
