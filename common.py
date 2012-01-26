@@ -41,7 +41,7 @@ def setup_virtualenv():
 	""" creates a virtual environment """
 
 	print(green("Creating a virtual environment in %s" % env.virtualenv_root))
-	sudo('WORKON_HOME=%s' % (env.virtualenv_root) + ' && ' + 'source /usr/local/bin/virtualenvwrapper.sh && ' + 'mkvirtualenv --no-site-packages %s' % (env.project),user=env.user)
+	sudo('WORKON_HOME=%s' % (env.virtualenv_root) + ' && ' + 'source /usr/local/bin/virtualenvwrapper.sh && ' + 'mkvirtualenv --no-site-packages %s' % (env.project))
 
 
 def clone_repo():
